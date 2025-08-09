@@ -35,21 +35,15 @@
                   @click="handleBalanceSelect()" 
                   :disabled="isSelecting"
                 >
-                  <i :class="[
-                    'mr-2 text-teal-600',
-                    isSelecting ? 'fas fa-spinner fa-spin' : 'fas fa-balance-scale'
-                  ]"></i>
-                  {{ isSelecting ? '平衡中...' : '平衡选择' }}
+                  <i class="fas fa-balance-scale mr-2 text-teal-600"></i>
+                  平衡选择
                 </el-dropdown-item>
                 <el-dropdown-item 
                   @click="handleRandomSelect()" 
                   :disabled="isSelecting"
                 >
-                  <i :class="[
-                    'mr-2 text-purple-600',
-                    isSelecting ? 'fas fa-spinner fa-spin' : 'fas fa-random'
-                  ]"></i>
-                  {{ isSelecting ? '随机中...' : '随机选择' }}
+                  <i class="fas fa-random mr-2 text-purple-600"></i>
+                  随机选择
                 </el-dropdown-item>
                 <el-dropdown-item 
                   @click="clearCandidates()" 
@@ -173,13 +167,14 @@
           </div>
           
           <!-- 玩家列表 - 已选择的排在前面 -->
-          <TransitionGroup 
-            name="player-list" 
-            tag="div" 
-            class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4"
-          >
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
             <!-- 已选择的玩家 -->
-            <div v-for="player in selectedPlayers" :key="`selected-${player.id}`" class="relative">
+            <div 
+              v-for="player in selectedPlayers" 
+              :key="`selected-${player.id}`" 
+              class="relative player-card-container"
+              :class="getPlayerCardAnimation(player.id, true)"
+            >
               <Transition name="check-badge" appear>
                 <div class="absolute top-2 right-2 z-10 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-md">
                   <i class="fas fa-check text-white text-xs"></i>
@@ -200,7 +195,12 @@
             </div>
             
             <!-- 未选择的玩家 -->
-            <div v-for="player in unselectedPlayers" :key="`unselected-${player.id}`" class="relative">
+            <div 
+              v-for="player in unselectedPlayers" 
+              :key="`unselected-${player.id}`" 
+              class="relative player-card-container"
+              :class="getPlayerCardAnimation(player.id, false)"
+            >
               <PlayerCard 
                 :player="player"
                 size="small"
@@ -213,7 +213,7 @@
                 @delete="removePlayer"
               />
             </div>
-          </TransitionGroup>
+          </div>
         </div>
       </div>
     </div>
@@ -378,6 +378,62 @@
 .animate-pulse-success {
   animation: pulse-success 0.6s ease-in-out;
 }
+
+/* 基础玩家卡片动画 */
+.player-card-container {
+  transition: all 0.3s ease;
+}
+
+.player-transition {
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* 随机选择动画效果 */
+.shuffle-effect {
+  animation: balanceIn 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* 平衡选择动画效果 */
+.balance-effect {
+  animation: balanceIn 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes balanceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-20px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05) translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 最近选中的高亮效果 */
+.recently-selected {
+  animation: highlightSelected 0.6s ease-out;
+}
+
+@keyframes highlightSelected {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+/* 正在动画中的状态 */
+.animating {
+  z-index: 10;
+}
 </style>
 
 <script setup>
@@ -447,8 +503,12 @@ const showClearAllConfirm = ref(false)
 // Toast 通知
 const { showToast } = useToast()
 
-// 防止重复点击的状态
+// 防止重复点击的状态和动画控制
 const isSelecting = ref(false)
+const isAnimating = ref(false)
+const animationType = ref('') // 'random' or 'balance'
+const animatingPlayers = ref(new Set()) // 正在动画的玩家ID
+const recentlySelected = ref(new Set()) // 最近被选中的玩家ID
 
 const rankOptions = [
   { label: '🥉 青铜', value: 'bronze' },
@@ -461,10 +521,12 @@ const rankOptions = [
 ]
 
 // 计算已选择和未选择的玩家列表
+// 已选择的按照在candidates中的顺序排列（最新选择的在末尾）
 const selectedPlayers = computed(() => {
-  return props.players.filter(player => 
-    props.candidates.some(candidate => candidate.id === player.id)
-  )
+  // 按照candidates数组的顺序排列，保持选择顺序
+  return props.candidates
+    .map(candidate => props.players.find(player => player.id === candidate.id))
+    .filter(player => player) // 过滤掉可能不存在的玩家
 })
 
 const unselectedPlayers = computed(() => {
@@ -478,11 +540,11 @@ const togglePlayerSelection = (playerId) => {
   const isSelected = props.candidates.some(c => c.id === playerId)
   
   if (isSelected) {
-    // 如果已选择，则移除
+    // 如果已选择，则移除（移除的选手将自动出现在未选择列表的末尾）
     const newCandidates = props.candidates.filter(c => c.id !== playerId)
     emit('update-candidates', newCandidates)
   } else {
-    // 如果未选择，且待选区未满，则添加
+    // 如果未选择，且待选区未满，则添加到队列末尾
     if (props.candidates.length >= 10) {
       // 待选区已满，不能再添加
       showToast('最多只能选择10名选手', 'warning')
@@ -498,6 +560,7 @@ const togglePlayerSelection = (playerId) => {
         rank: player.rank,
         power: player.power
       }
+      // 添加到candidates数组的末尾，这样新选择的选手会出现在已选择列表的末尾
       const newCandidates = [...props.candidates, playerData]
       emit('update-candidates', newCandidates)
     }
@@ -637,24 +700,52 @@ const handleBalanceSelect = async () => {
   isSelecting.value = true
   
   try {
+    // 清空状态
+    recentlySelected.value.clear()
+    animatingPlayers.value.clear()
+    
     // 先清空已选择的玩家
     emit('clear-candidates')
     
-    // 等待一下确保清空完成
-    await new Promise(resolve => setTimeout(resolve, 50))
+    // 等待清空完成
+    await new Promise(resolve => setTimeout(resolve, 300))
     
-    // 然后执行平衡选择
+    // 开始平衡选择动画
+    isAnimating.value = true
+    animationType.value = 'balance'
+    
+    // 执行平衡选择
     emit('balance-select')
     
-    // 降低提示频率：不提示
+    // 等待DOM更新后添加动画效果
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // 为新选中的玩家添加动画标记
+    props.candidates.forEach((candidate, index) => {
+      setTimeout(() => {
+        recentlySelected.value.add(candidate.id)
+        animatingPlayers.value.add(candidate.id)
+        
+        // 移除动画标记
+        setTimeout(() => {
+          animatingPlayers.value.delete(candidate.id)
+        }, 600)
+      }, index * 100) // 错开动画时间
+    })
+    
+    // 等待所有动画完成
+    await new Promise(resolve => setTimeout(resolve, 800))
+    
   } catch (error) {
     console.error('平衡选择失败:', error)
-    // 平衡选择失败通常是内部逻辑问题，不需要提示用户
   } finally {
-    // 较短的防抖时间，允许快速重新选择
+    // 重置动画状态
     setTimeout(() => {
       isSelecting.value = false
-    }, 200)
+      isAnimating.value = false
+      animationType.value = ''
+      recentlySelected.value.clear()
+    }, 300)
   }
 }
 
@@ -665,30 +756,90 @@ const handleRandomSelect = async () => {
   isSelecting.value = true
   
   try {
+    // 清空状态
+    recentlySelected.value.clear()
+    animatingPlayers.value.clear()
+    
     // 先清空已选择的玩家
     emit('clear-candidates')
     
-    // 等待一下确保清空完成
-    await new Promise(resolve => setTimeout(resolve, 50))
+    // 等待清空完成
+    await new Promise(resolve => setTimeout(resolve, 300))
     
-    // 然后执行随机选择
+    // 开始随机选择动画
+    isAnimating.value = true
+    animationType.value = 'random'
+    
+    // 执行随机选择
     emit('random-select')
     
-    // 降低提示频率：不提示
+    // 等待DOM更新后添加动画效果
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // 为新选中的玩家添加随机动画标记
+    const shuffledIndices = [...Array(props.candidates.length).keys()].sort(() => Math.random() - 0.5)
+    shuffledIndices.forEach((originalIndex, animationIndex) => {
+      if (props.candidates[originalIndex]) {
+        setTimeout(() => {
+          recentlySelected.value.add(props.candidates[originalIndex].id)
+          animatingPlayers.value.add(props.candidates[originalIndex].id)
+          
+          // 移除动画标记
+          setTimeout(() => {
+            animatingPlayers.value.delete(props.candidates[originalIndex].id)
+          }, 800)
+        }, animationIndex * 150) // 随机错开动画时间
+      }
+    })
+    
+    // 等待所有动画完成
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    
   } catch (error) {
     console.error('随机选择失败:', error)
-    // 随机选择失败通常是内部逻辑问题，不需要提示用户
   } finally {
-    // 较短的防抖时间，允许快速重新随机
+    // 重置动画状态
     setTimeout(() => {
       isSelecting.value = false
-    }, 200)
+      isAnimating.value = false
+      animationType.value = ''
+      recentlySelected.value.clear()
+    }, 300)
   }
 }
 
 // 清空待选区
 const clearCandidates = () => {
   emit('clear-candidates')
+}
+
+// 获取玩家卡片动画类
+const getPlayerCardAnimation = (playerId, isSelected) => {
+  const classes = []
+  
+  // 基础动画类
+  classes.push('player-transition')
+  
+  // 如果正在进行选择动画
+  if (isAnimating.value) {
+    if (animationType.value === 'random') {
+      classes.push('shuffle-effect')
+    } else if (animationType.value === 'balance') {
+      classes.push('balance-effect')
+    }
+  }
+  
+  // 如果是最近被选中的
+  if (recentlySelected.value.has(playerId)) {
+    classes.push('recently-selected')
+  }
+  
+  // 如果正在动画中
+  if (animatingPlayers.value.has(playerId)) {
+    classes.push('animating')
+  }
+  
+  return classes.join(' ')
 }
 
 
