@@ -102,46 +102,6 @@
       </div>
     </template>
 
-    <!-- 编辑选手表单 -->
-    <div v-if="showEditForm" class="p-4 border border-blue-200 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 mb-4">
-      <div class="flex items-center justify-between mb-3">
-        <h4 class="font-semibold text-slate-800 text-lg">
-          <i class="fas fa-edit mr-2 text-blue-600"></i>编辑选手
-        </h4>
-        <el-button link size="small" @click="showEditForm = false"><i class="fas fa-times"></i></el-button>
-      </div>
-      <div class="bg-blue-100 border border-blue-200 rounded-lg p-3 mb-4">
-        <div class="flex items-start space-x-2">
-          <i class="fas fa-info-circle text-blue-600 mt-0.5"></i>
-          <div class="text-sm text-blue-700">
-            <p class="font-medium">编辑说明：</p>
-            <ul class="list-disc list-inside mt-1 space-y-1">
-              <li>修改选手基本信息</li>
-              <li>调整段位和分数</li>
-              <li>分数留空将重新计算</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-2 text-slate-700">选手昵称 *</label>
-          <el-input v-model="editForm.name" placeholder="请输入选手昵称..." size="large"/>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-2 text-slate-700">段位</label>
-          <BaseSelect v-model="editForm.rank" :options="rankOptions" size="large" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-2 text-slate-700">分数</label>
-          <el-input v-model="editForm.power" type="number" placeholder="留空重新计算..." size="large"/>
-        </div>
-      </div>
-      <div class="mt-4 flex space-x-3">
-        <el-button type="primary" class="flex-1" @click="handleEditPlayer"><i class="fas fa-save mr-2"></i>保存修改</el-button>
-        <el-button class="flex-1" @click="showEditForm = false">取消</el-button>
-      </div>
-    </div>
 
     <div class="p-0">
       <div class="flex-1">
@@ -188,7 +148,6 @@
                 :clickable="true"
                 @click="togglePlayerSelection(player.id)"
                 :show-actions="true"
-                @edit="editPlayer"
                 @update="handleInlineUpdate"
                 @delete="removePlayer"
               />
@@ -208,7 +167,6 @@
                 :clickable="true"
                 @click="togglePlayerSelection(player.id)"
                 :show-actions="true"
-                @edit="editPlayer"
                 @update="handleInlineUpdate"
                 @delete="removePlayer"
               />
@@ -485,13 +443,6 @@ const singleAddForm = ref({
   power: ''
 })
 const batchAddText = ref('')
-const showEditForm = ref(false)
-const editingPlayer = ref(null)
-const editForm = ref({
-  name: '',
-  rank: 'gold',
-  power: ''
-})
 // 批量添加占位符（多行）
 const batchPlaceholder = `示例：\n小明,gold\n小红,platinum\n小刚\n张三,silver\n李四,master`
 
@@ -519,6 +470,7 @@ const rankOptions = [
   { label: '👑 大师', value: 'master' },
   { label: '🏆 王者', value: 'grandmaster' }
 ]
+
 
 // 计算已选择和未选择的玩家列表
 // 已选择的按照在candidates中的顺序排列（最新选择的在末尾）
@@ -605,67 +557,6 @@ const handleBatchAddPlayers = () => {
   }
 }
 
-const editPlayer = (id) => {
-  console.log('Editing player with id:', id)
-  const player = props.players.find(p => p.id === id)
-  if (player) {
-    console.log('Found player:', player)
-    // 创建一个新的对象来存储编辑中的玩家数据
-    editingPlayer.value = { ...player }
-    // 设置表单数据
-    editForm.value = {
-      name: player.name,
-      rank: player.rank,
-      power: player.power ? player.power.toString() : ''
-    }
-    // 显示编辑表单
-    showEditForm.value = true
-  } else {
-    console.error('Player not found with id:', id)
-  }
-}
-
-const handleEditPlayer = () => {
-  console.log('Handling edit player submit')
-  if (!editForm.value.name.trim()) {
-    console.error('Player name is required')
-    return
-  }
-
-  if (!editingPlayer.value) {
-    console.error('No player being edited')
-    return
-  }
-
-  try {
-    // 确保所有必要的字段都存在
-    const updatedPlayer = {
-      id: editingPlayer.value.id,
-      name: editForm.value.name.trim(),
-      rank: editForm.value.rank,
-      power: editForm.value.power ? parseInt(editForm.value.power) : null
-    }
-
-    // 打印更新前的数据
-    console.log('Current player:', editingPlayer.value)
-    console.log('Form data:', editForm.value)
-    console.log('Updating player with data:', updatedPlayer)
-
-    // 发出更新事件
-    emit('edit-player', updatedPlayer)
-
-    // 重置表单状态
-    showEditForm.value = false
-    editingPlayer.value = null
-    editForm.value = {
-      name: '',
-      rank: 'gold',
-      power: ''
-    }
-  } catch (error) {
-    console.error('Error updating player:', error)
-  }
-}
 
 // 卡片内联编辑更新
 const handleInlineUpdate = (updated) => {

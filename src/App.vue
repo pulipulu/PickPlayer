@@ -24,6 +24,8 @@
         :currentMode="currentMode"
         :draftData="draftData"
         :candidateCount="candidates.length"
+        :historyRecords="historyRecords"
+        :calculatePlayerStats="calculatePlayerStats"
         @rematch="handleRematch"
         @share="shareResult"
         @save-result="handleSaveMatchResult"
@@ -74,6 +76,61 @@
     <!-- 加载提示 -->
 
 
+    <!-- 胜利奖励确认弹窗 -->
+    <el-dialog 
+      :model-value="showWinBonusModal" 
+      width="min(95vw, 500px)" 
+      append-to-body 
+      destroy-on-close
+      @update:model-value="val => showWinBonusModal = val"
+    >
+      <template #header>
+        <div class="text-base font-bold text-center">
+          <i class="fas fa-trophy mr-2 text-yellow-600"></i>
+          胜利奖励确认
+        </div>
+      </template>
+      <div class="text-center">
+        <div class="w-16 h-16 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fas fa-star text-2xl text-white"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-slate-800 mb-2">
+          {{ pendingWinner === 'red' ? '红队' : '蓝队' }} 获得胜利！
+        </h3>
+        <p class="text-slate-600 mb-4">
+          是否给胜利队伍的选手增加 <span class="font-bold text-green-600">+20</span> 实力分？
+        </p>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div class="flex items-start space-x-2">
+            <i class="fas fa-info-circle text-blue-600 mt-0.5"></i>
+            <div class="text-sm text-blue-700">
+              <p class="font-medium">奖励说明：</p>
+              <ul class="list-disc list-inside mt-1 space-y-1">
+                <li>胜利队伍的所有选手实力分+20</li>
+                <li>实力分会影响后续匹配的平衡度</li>
+                <li>可以在选手管理中手动调整实力分</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-3">
+          <el-button 
+            type="success" 
+            class="flex-1" 
+            @click="confirmWinBonus(true)"
+          >
+            <i class="fas fa-plus mr-2"></i>给奖励 (+20分)
+          </el-button>
+          <el-button 
+            class="flex-1" 
+            @click="cancelWinBonus"
+          >
+            <i class="fas fa-times mr-2"></i>不给奖励
+          </el-button>
+        </div>
+      </div>
+    </el-dialog>
+
     <!-- Toast 通知 -->
     <ToastContainer :toasts="toasts" @remove="removeToast" />
   </div>
@@ -123,9 +180,42 @@ const draftData = ref(null)
 const showHistory = ref(false)
 const historyRecords = useStorage('game-history', [])
 
+// 计算选手战绩的函数
+const calculatePlayerStats = (playerId) => {
+  let wins = 0
+  let losses = 0
+  
+  historyRecords.value.forEach(record => {
+    if (!record.winner) return // 跳过未设置结果的记录
+    
+    // 检查选手是否在红队
+    const inRedTeam = record.red.players.some(p => p.id === playerId)
+    // 检查选手是否在蓝队
+    const inBlueTeam = record.blue.players.some(p => p.id === playerId)
+    
+    if (inRedTeam) {
+      if (record.winner === 'red') {
+        wins++
+      } else if (record.winner === 'blue') {
+        losses++
+      }
+    } else if (inBlueTeam) {
+      if (record.winner === 'blue') {
+        wins++
+      } else if (record.winner === 'red') {
+        losses++
+      }
+    }
+  })
+  
+  return { wins, losses }
+}
+
 // 弹窗显示状态
 const showSettings = ref(false)
 const showPlayersModal = ref(false)
+const showWinBonusModal = ref(false)
+const pendingWinner = ref(null)
 // 移除待选区弹窗，合并到玩家管理弹窗
 
 // 方法
@@ -179,8 +269,6 @@ const handleAddSinglePlayer = (playerData) => {
   }
   
   players.value.push(newPlayer)
-  console.log('Added player with ID:', newPlayer.id, 'Total players:', players.value.length)
-  // 移除添加成功提示，界面更新已足够反馈
 }
 
 const addSamplePlayers = () => {
@@ -189,7 +277,6 @@ const addSamplePlayers = () => {
 }
 
 const editPlayer = (updatedPlayer) => {
-  console.log('Editing player:', updatedPlayer)
   const playerIndex = players.value.findIndex(p => p.id === updatedPlayer.id)
   
   if (playerIndex === -1) {
@@ -199,18 +286,25 @@ const editPlayer = (updatedPlayer) => {
   }
 
   try {
-    // 如果没有指定分数，根据段位自动计算
-    if (updatedPlayer.power === null || updatedPlayer.power === undefined || updatedPlayer.power === '') {
-      const rankPowers = {
-        bronze: 100,
-        silver: 200,
-        gold: 300,
-        platinum: 400,
-        diamond: 500,
-        master: 600,
-        grandmaster: 700
-      }
-      // 同段位默认相同初始值（不加随机）
+    const rankPowers = {
+      bronze: 100,
+      silver: 200,
+      gold: 300,
+      platinum: 400,
+      diamond: 500,
+      master: 600,
+      grandmaster: 700
+    }
+    
+    // 获取当前玩家的原始数据
+    const originalPlayer = players.value[playerIndex]
+    
+    // 如果段位发生了变化，或者分数为空，则根据新段位重新计算分数
+    if (originalPlayer.rank !== updatedPlayer.rank || 
+        updatedPlayer.power === null || 
+        updatedPlayer.power === undefined || 
+        updatedPlayer.power === '') {
+      // 根据新段位计算基础分数
       const basePower = rankPowers[updatedPlayer.rank] || 300
       updatedPlayer.power = basePower
     }
@@ -240,7 +334,6 @@ const editPlayer = (updatedPlayer) => {
       }
     }
     
-    console.log('Player updated successfully:', newPlayerData)
     // 移除更新成功提示，界面更新已足够反馈
   } catch (error) {
     console.error('Error updating player:', error)
@@ -359,6 +452,11 @@ const startRandomMatch = () => {
   // 重置之前的选马数据和模式
   draftData.value = null
   
+  // 清空所有候选者的队长状态
+  candidates.value.forEach(candidate => {
+    candidate.isCaptain = false
+  })
+  
   try {
     const result = randomMatch(candidates.value)
     
@@ -398,6 +496,12 @@ const startDraftMode = () => {
     matchResult.value = null
     currentMode.value = null
     draftData.value = null
+    
+    // 清空所有候选者的队长状态
+    candidates.value.forEach(candidate => {
+      candidate.isCaptain = false
+    })
+    
     resetDraft() // 确保选马状态被完全重置
     
     const result = startDraft(candidates.value, 5)
@@ -499,7 +603,40 @@ const completeDraft = () => {
 }
 const handleSaveMatchResult = (winner) => {
   if (!matchResult.value) return
+  
+  // 显示胜利奖励确认弹窗
+  pendingWinner.value = winner
+  showWinBonusModal.value = true
+}
+
+const confirmWinBonus = (giveBonus) => {
+  if (!matchResult.value || !pendingWinner.value) return
+  
   const r = matchResult.value
+  const winner = pendingWinner.value
+  
+  // 如果选择给奖励，更新胜利队伍选手的实力分
+  if (giveBonus) {
+    const winningTeam = winner === 'red' ? r.redTeam : r.blueTeam
+    
+    // 更新玩家列表中的实力分
+    winningTeam.players.forEach(winningPlayer => {
+      const playerIndex = players.value.findIndex(p => p.id === winningPlayer.id)
+      if (playerIndex > -1) {
+        players.value[playerIndex].power += 20
+      }
+      
+      // 如果玩家在候选区中，也要更新
+      const candidateIndex = candidates.value.findIndex(c => c.id === winningPlayer.id)
+      if (candidateIndex > -1) {
+        candidates.value[candidateIndex].power += 20
+      }
+    })
+    
+    showToast(`${winner === 'red' ? '红队' : '蓝队'}选手实力分+20！`, 'success')
+  }
+  
+  // 保存比赛记录
   const makeTeam = (team) => ({
     total: team.totalPower,
     avg: team.averagePower,
@@ -512,13 +649,21 @@ const handleSaveMatchResult = (winner) => {
     balance: r.balanceScore,
     winner,
     red: makeTeam(r.redTeam),
-    blue: makeTeam(r.blueTeam)
+    blue: makeTeam(r.blueTeam),
+    bonusGiven: giveBonus
   }
   historyRecords.value = [rec, ...historyRecords.value]
-  // 移除保存成功提示，庆祝动画已经提供足够反馈
-  // 立即返回主界面，同时礼花动画继续在页面顶层播放
+  
+  // 关闭弹窗并重置状态
+  showWinBonusModal.value = false
+  pendingWinner.value = null
   matchResult.value = null
   currentMode.value = null
+}
+
+const cancelWinBonus = () => {
+  // 直接保存记录，不给奖励
+  confirmWinBonus(false)
 }
 
 const updateHistoryRecords = (list) => {
@@ -544,7 +689,7 @@ const shareResult = async () => {
     const lines = team.players.map((p, idx) => {
       const crown = p.isCaptain ? '👑 ' : ''
       const rankText = rankName(p.rank)
-      const rankSuffix = rankText ? `（${rankText}）` : ''
+      const rankSuffix = rankText ? `（${rankText}-${p.power}分）` : ''
       return `${idx + 1}. ${crown}${p.name}${rankSuffix}`
     })
     return `${name}｜总实力 ${team.totalPower}｜均值 ${team.averagePower}\n${lines.join('\n')}`
@@ -552,7 +697,7 @@ const shareResult = async () => {
 
   const modeText = result.mode === 'draft' ? '选马模式' : '随机匹配'
   const ts = new Date().toLocaleString()
-  const header = `PICK内战选马｜战报\n模式：${modeText}｜平衡度：${result.balanceScore}%\n时间：${ts}`
+  const header = `PICK内战选马｜战报｜第${historyRecords.value.length + 1}局\n模式：${modeText}｜平衡度：${result.balanceScore}%\n时间：${ts}`
   const text = `${header}\n\n${formatTeam(result.redTeam, '红队')}\n\n${formatTeam(result.blueTeam, '蓝队')}`
 
   try {

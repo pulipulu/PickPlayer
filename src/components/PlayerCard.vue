@@ -120,6 +120,18 @@
       </div>
       <div class="text-xs text-slate-500 mt-1">实力值</div>
 
+      <!-- 战绩信息 -->
+      <div v-if="playerStats.wins > 0 || playerStats.losses > 0" class="mt-2">
+        <div class="flex items-center justify-center space-x-2">
+          <span class="text-xs text-green-600 font-medium">
+            <i class="fas fa-trophy mr-1"></i>{{ playerStats.wins }}胜
+          </span>
+          <span class="text-xs text-red-600 font-medium">
+            <i class="fas fa-times mr-1"></i>{{ playerStats.losses }}负
+          </span>
+        </div>
+      </div>
+
       <!-- 操作按钮/图标 -->
       <div v-if="showAction" class="mt-2">
         <i 
@@ -195,6 +207,14 @@ const props = defineProps({
   cardClass: {
     type: String,
     default: ''
+  },
+  historyRecords: {
+    type: Array,
+    default: () => []
+  },
+  calculatePlayerStats: {
+    type: Function,
+    default: () => ({ wins: 0, losses: 0 })
   }
 })
 
@@ -206,6 +226,14 @@ const editName = ref('')
 const editRank = ref('gold')
 const editPower = ref(0)
 const isSelecting = ref(false)
+
+// 计算选手战绩
+const playerStats = computed(() => {
+  if (!props.calculatePlayerStats || !props.historyRecords.length) {
+    return { wins: 0, losses: 0 }
+  }
+  return props.calculatePlayerStats(props.player.id)
+})
 
 // 添加编辑和删除处理函数
 const handleEdit = (e) => {

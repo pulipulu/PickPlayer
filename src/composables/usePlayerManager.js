@@ -69,7 +69,6 @@ export function usePlayerManager() {
     }
 
     players.value.push(player)
-    console.log('Added player via usePlayerManager with ID:', player.id)
     return true
   }
 

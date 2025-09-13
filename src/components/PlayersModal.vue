@@ -271,10 +271,8 @@ const handleAddSinglePlayer = () => {
 }
 
 const editPlayer = (id) => {
-  console.log('Editing player with id:', id)
   const player = props.players.find(p => p.id === id)
   if (player) {
-    console.log('Found player:', player)
     // 创建一个新的对象来存储编辑中的玩家数据
     editingPlayer.value = { ...player }
     // 设置表单数据
@@ -291,7 +289,6 @@ const editPlayer = (id) => {
 }
 
 const handleEditPlayer = () => {
-  console.log('Handling edit player submit')
   if (!editForm.value.name.trim()) {
     console.error('Player name is required')
     return
@@ -312,10 +309,6 @@ const handleEditPlayer = () => {
     }
 
     // 打印更新前的数据
-    console.log('Current player:', editingPlayer.value)
-    console.log('Form data:', editForm.value)
-    console.log('Updating player with data:', updatedPlayer)
-
     // 发出更新事件
     emit('edit-player', updatedPlayer)
 

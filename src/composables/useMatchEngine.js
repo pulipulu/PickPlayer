@@ -41,18 +41,12 @@ export function useMatchEngine() {
     const redTeam = shuffled.slice(0, midPoint)
     const blueTeam = shuffled.slice(midPoint)
     
-    // 为每队选择队长（实力最高的）
-    const redCaptain = redTeam.reduce((max, player) => 
-      player.power > max.power ? player : max, redTeam[0])
-    const blueCaptain = blueTeam.reduce((max, player) => 
-      player.power > max.power ? player : max, blueTeam[0])
-    
-    // 标记队长
+    // 随机匹配不需要队长，确保所有玩家都没有队长标记
     redTeam.forEach(player => {
-      player.isCaptain = player.id === redCaptain.id
+      player.isCaptain = false
     })
     blueTeam.forEach(player => {
-      player.isCaptain = player.id === blueCaptain.id
+      player.isCaptain = false
     })
     
     const balanceScore = calculateBalanceScore(redTeam, blueTeam)

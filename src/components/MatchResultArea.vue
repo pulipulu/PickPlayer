@@ -241,7 +241,8 @@
                       :clickable="true"
                       :card-class="getPlayerCardClass(player)"
                       :data-player-id="player.id"
-
+                      :history-records="historyRecords"
+                      :calculate-player-stats="calculatePlayerStats"
                       @click="handlePlayerCardClick(player.id)"
                     />
                   </TransitionGroup>
@@ -547,6 +548,14 @@ const props = defineProps({
   candidateCount: {
     type: Number,
     default: 0
+  },
+  historyRecords: {
+    type: Array,
+    default: () => []
+  },
+  calculatePlayerStats: {
+    type: Function,
+    default: () => ({ wins: 0, losses: 0 })
   }
 })
 
